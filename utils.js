@@ -23,16 +23,6 @@ const createOutput = (amount, assetID, addresses, locktime, threshold) => {
     )
 }
 
-const getCustodialSpenders = (addresses, spenders) => {
-    let custodialSpenders = []
-    addresses.forEach((address) => {
-        if(spenders.includes(address)) {
-            custodialSpenders.push(address)
-        }
-    })
-    return custodialSpenders;
-}
-
 const addSignatures = (addresses, threshold, input) => {
     let sigIndex = 0;
     addresses.every((address) => {
@@ -69,13 +59,12 @@ const updateInputs = (utxos, addresses, assetID, toBeUnlocked) => {
         let output = utxo.getOutput()
         if(output.getOutputID() === 7 && assetID.compare(utxo.getAssetID()) === 0 && netInputBalance < toBeUnlocked) {
             let outputThreshold = output.getThreshold();
-            let spenders = output.getSpenders(addresses);
 
             // spenders which we have in our keychain
-            let custodialSpenders = getCustodialSpenders(addresses, spenders)
+            let qualifiedSpenders = output.getSpenders(addresses);
 
             // create inputs only if we have custody of threshold or more number of utxo spenders
-            if(outputThreshold <= custodialSpenders.length) {
+            if(outputThreshold <= qualifiedSpenders.length) {
                 let txID = utxo.getTxID();
                 let outputIndex = utxo.getOutputIdx();
                 let utxoAmount = output.amountValue;
@@ -88,7 +77,7 @@ const updateInputs = (utxos, addresses, assetID, toBeUnlocked) => {
                     changeTransferableOutput = createOutput(
                         utxoAmount.sub(toBeUnlocked),
                         assetID,
-                        spenders,
+                        qualifiedSpenders,
                         outputLocktime,
                         outputThreshold
                     )
@@ -100,7 +89,7 @@ const updateInputs = (utxos, addresses, assetID, toBeUnlocked) => {
                     txID,
                     outputIndex,
                     assetID,
-                    custodialSpenders,
+                    qualifiedSpenders,
                     outputThreshold
                 )
     
@@ -112,7 +101,6 @@ const updateInputs = (utxos, addresses, assetID, toBeUnlocked) => {
 }
 
 module.exports = {
-    getCustodialSpenders,
     addSignatures,
     createOutput,
     createInput,
