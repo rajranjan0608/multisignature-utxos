@@ -23,7 +23,7 @@ const createOutput = (amount, assetID, addresses, locktime, threshold) => {
     )
 }
 
-const addSignatures = (addresses, threshold, input) => {
+const addSignatureIndexes = (addresses, threshold, input) => {
     let sigIndex = 0;
     addresses.every((address) => {
         if(threshold > 0) {
@@ -42,7 +42,7 @@ const createInput = (amount, txID, outputIndex, assetID, spenders, threshold) =>
     let transferInput = new SECPTransferInput(amount)
 
     // adding threshold signatures
-    addSignatures(spenders, threshold, transferInput)
+    addSignatureIndexes(spenders, threshold, transferInput)
 
     // creating transferable input
     return new TransferableInput(
@@ -72,10 +72,12 @@ const updateInputs = (utxos, addresses, assetID, toBeUnlocked) => {
 
                 netInputBalance = netInputBalance.add(utxoAmount)
 
+                let excessAmount = toBeUnlocked.sub(netInputBalance);
+
                 // creating change transferable output
-                if(utxoAmount > toBeUnlocked) {
+                if(excessAmount < 0) {
                     changeTransferableOutput = createOutput(
-                        utxoAmount.sub(toBeUnlocked),
+                        excessAmount.abs(),
                         assetID,
                         qualifiedSpenders,
                         outputLocktime,
@@ -101,7 +103,6 @@ const updateInputs = (utxos, addresses, assetID, toBeUnlocked) => {
 }
 
 module.exports = {
-    addSignatures,
     createOutput,
     createInput,
     updateInputs
