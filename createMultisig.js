@@ -1,13 +1,7 @@
 const { 
     getOutputs,
-    networkID,
     BN,
 } = require("./importAPI");
-
-const {
-    UnsignedTx,
-    BaseTx
-} = require("avalanche/dist/apis/avm/index");
 
 const { createOutput, updateInputs } = require('./utils');
 
@@ -16,24 +10,21 @@ const { createOutput, updateInputs } = require('./utils');
  * @param {Buffer} assetID ID of the asset involved in transaction
  * @param {Buffer} chainID ID of the chain on which this transaction will be issued
  * @param {Buffer[]} addresses Address whose UTXO will be consumed
- * @param {string[]} addressStrings Address strings whose UTXO will be consumed
+ * @param {string[]} addressStrings Address strings whose UTXO will be fetched
  * @param {Buffer[]} ownerAddresses Addresses which will control the output after transaction is committed
- * @param {any} keyChain Keychain for the addresses whose UTXO will be consumed (here addressStrings)
+ * @param {BN} toBeUnlocked Amount of nAVAX to lock with the addresses in the output
  * @param {number} threshold Minimum number of signers required to consume the newly created output
- * @param {BN} amount Amount of nAVAX to lock with the addresses in the output
  * @returns Signed base transaction
  */
-const createMultisigBaseTx = async (assetID, chainID, addresses, addressStrings, ownerAddresses, keyChain, threshold, amount) => {
+const createInputsAndOutputs = async (assetID, chainID, addresses, addressStrings, outputConfig, fee, sourceChain) => {
     let locktime = new BN(0)
-    let memo = Buffer.from("Multisig Base Transaction...")
-    
-    // consuming amounts (change will be handled while creating inputs)
-    let fee = new BN(1e7)
-    let toBeUnlocked = amount.add(fee)
 
-    // toBeUnlocked - amount = fee (this will be remain unlocked and hence will be burned)
+    let utxos = await getOutputs(addressStrings, chainID, sourceChain)
 
-    let utxos = await getOutputs(addressStrings, chainID)
+    let toBeUnlocked = fee;
+    outputConfig.forEach((output) => {
+        toBeUnlocked = toBeUnlocked.add(output.amount)
+    }) 
 
     console.log("Total UTXOs:", utxos.length)
 
@@ -43,20 +34,22 @@ const createMultisigBaseTx = async (assetID, chainID, addresses, addressStrings,
 
     console.log("To be unlocked:", toBeUnlocked.toString())
     console.log("Net balance in inputs:", netInputBalance.toString())
-    console.log("Change:", netInputBalance.sub(toBeUnlocked).toString())
 
     let outputs = [];
 
     // creating transferable outputs and transfer outputs
     console.log("Creating outputs...")
-    let transferableOutput = createOutput(
-        amount,
-        assetID,
-        ownerAddresses,
-        locktime,
-        threshold
-    )
-    outputs.push(transferableOutput)
+
+    outputConfig.forEach((output) => {
+        let transferableOutput = createOutput(
+            output.amount,
+            assetID,
+            output.owners,
+            locktime,
+            output.threshold
+        )
+        outputs.push(transferableOutput)
+    })
     
     // pushing change output (if any)
     if(changeTransferableOutput !== null) {
@@ -64,19 +57,9 @@ const createMultisigBaseTx = async (assetID, chainID, addresses, addressStrings,
         outputs.push(changeTransferableOutput)
     }
 
-    const baseTx = new BaseTx(
-        networkID,
-        chainID,
-        outputs,
-        inputs,
-        memo
-    )
-
-    const unsignedTx = new UnsignedTx(baseTx)
-    const tx = unsignedTx.sign(keyChain)
-    return tx;
+    return { inputs, outputs }
 }
 
 module.exports = {
-    createMultisigBaseTx
+    createInputsAndOutputs
 }
