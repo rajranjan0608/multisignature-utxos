@@ -30,7 +30,7 @@ const createInputsAndOutputs = async (assetID, chainID, addresses, addressString
 
     // putting right utxos in the inputs
     console.log("Putting UTXOs in the inputs...")
-    let { inputs, changeTransferableOutput, netInputBalance } = updateInputs(utxos, addresses, assetID, toBeUnlocked)
+    let { inputs, changeTransferableOutput, netInputBalance } = updateInputs(utxos, addresses, assetID, toBeUnlocked, chainID)
 
     console.log("To be unlocked:", toBeUnlocked.toString())
     console.log("Net balance in inputs:", netInputBalance.toString())

@@ -1,13 +1,19 @@
 const {
-    SECPTransferInput,
-    TransferableInput,
-    SECPTransferOutput,
-    TransferableOutput
-} = require("avalanche/dist/apis/avm/index");
-
-const {
-    BN
+    BN,
+    chainIDs
 } = require("./importAPI")
+
+let SECPTransferInput, TransferableInput, SECPTransferOutput, TransferableOutput;
+
+const getTransferClass = (chainID) => {
+    let vm = ""
+    if(chainID.compare(chainIDs.x) == 0) {
+        vm = "avm"
+    } else if(chainID.compare(chainIDs.p) == 0) {
+        vm = "platformvm"
+    }
+    return { SECPTransferInput, TransferableInput, SECPTransferOutput, TransferableOutput, index } = require(`avalanche/dist/apis/${vm}/index`);
+}
 
 const createOutput = (amount, assetID, addresses, locktime, threshold) => {
     let transferOutput = new SECPTransferOutput(
@@ -53,7 +59,10 @@ const createInput = (amount, txID, outputIndex, assetID, spenders, threshold) =>
     )
 }
 
-const updateInputs = (utxos, addresses, assetID, toBeUnlocked) => {
+const updateInputs = (utxos, addresses, assetID, toBeUnlocked, chainID) => {
+    // Getting transferable inputs according to chain id
+    { SECPTransferInput, TransferableInput, SECPTransferOutput, TransferableOutput, index = getTransferClass(chainID) }
+
     let inputs = [], changeTransferableOutput = null, netInputBalance = new BN(0); 
     utxos.forEach((utxo) => {
         let output = utxo.getOutput()
