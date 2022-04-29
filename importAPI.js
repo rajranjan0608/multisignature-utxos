@@ -1,12 +1,25 @@
 const { Avalanche, BinTools, BN } = require("avalanche")
 
+const MnemonicHelper = require('avalanche/dist/utils/mnemonic').default
+const HDNode = require('avalanche/dist/utils/hdnode').default
+
 // Importing node details and Private key from the config file.
-const { ip, port, protocol, networkID, privateKeys } = require('./config.js');
+const { ip, port, protocol, networkID, privateKeys, mnemonic } = require('./config.js');
 
 let { avaxAssetID, chainIDs } = require('./constants.js');
 
 // For encoding and decoding to CB58 and buffers.
 const bintools = BinTools.getInstance();
+
+function getPrivateKey(mnemonic, activeIndex = 0) {
+	const mnemonicHelper = new MnemonicHelper()
+	const seed = mnemonicHelper.mnemonicToSeedSync(mnemonic)
+	const hdNode = new HDNode(seed)
+	
+	const walletPath = `m/44'/9000'/0'/0/${activeIndex}`;
+	
+	return hdNode.derive(walletPath).privateKeyCB58;
+}
 
 // Avalanche instance
 const avalanche = new Avalanche(ip, port, protocol, networkID, "X", "C", 'fuji')
@@ -21,11 +34,19 @@ const keyChains = {
 	p: platform.keyChain()
 }
 
-// importing keys in the key chain
-privateKeys.forEach((privKey) => {
+function importPrivateKeys(privKey) {
 	keyChains.x.importKey(privKey)
 	keyChains.p.importKey(privKey)
-})
+}
+
+// importing keys in the key chain - use this if you have any private keys
+// privateKeys.forEach((privKey) => {
+// 	importPrivateKeys(privKey)
+// })
+
+// importing private keys from mnemonic
+importPrivateKeys(getPrivateKey(mnemonic, 0))
+importPrivateKeys(getPrivateKey(mnemonic, 1))
 
 const addresses = {
 	x: keyChains.x.getAddresses(),
@@ -45,12 +66,12 @@ chainIDs = {
 }
 
 // UTXOs for spending unspent outputs
-const getOutputs = async (addresses, chainID) => {
+const getOutputs = async (addresses, chainID, sourceChain = undefined) => {
 	let utxoSet;
 	if(chainID.compare(chainIDs.x) == 0) {
-		utxoSet = await avax.getUTXOs(addresses)
+		utxoSet = await avax.getUTXOs(addresses, sourceChain)
 	} else if (chainID.compare(chainIDs.p) == 0) {
-		utxoSet = await platform.getUTXOs(addresses)
+		utxoSet = await platform.getUTXOs(addresses, sourceChain)
 	}
 	return utxoSet.utxos.getAllUTXOs()
 }

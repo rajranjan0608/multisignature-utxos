@@ -5,5 +5,6 @@ module.exports = {
 	ip: "api.avax-test.network",
 	port: 443,
 	networkID: 5,
-	privateKeys: JSON.parse(process.env.PRIVATEKEYS)
+	privateKeys: JSON.parse(process.env.PRIVATEKEYS),
+	mnemonic: process.env.MNEMONIC
 }
