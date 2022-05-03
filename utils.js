@@ -1,9 +1,10 @@
 const {
     BN,
-    chainIDs
+    chainIDs,
+    web3,
 } = require("./importAPI")
 
-let SECPTransferInput, TransferableInput, SECPTransferOutput, TransferableOutput;
+let SECPTransferInput, TransferableInput, SECPTransferOutput, TransferableOutput, EVMInput, EVMOutput;
 
 const getTransferClass = (chainID) => {
     let vm = ""
@@ -11,8 +12,31 @@ const getTransferClass = (chainID) => {
         vm = "avm"
     } else if(chainID.compare(chainIDs.p) == 0) {
         vm = "platformvm"
+    } else if(chainID.compare(chainIDs.c) == 0) {
+        vm = "evm"
     }
-    return { SECPTransferInput, TransferableInput, SECPTransferOutput, TransferableOutput, index } = require(`avalanche/dist/apis/${vm}/index`);
+    return { SECPTransferInput, TransferableInput, SECPTransferOutput, TransferableOutput, EVMInput, EVMOutput, index } = require(`avalanche/dist/apis/${vm}/index`);
+}
+
+const createEVMInput = (amount, addresses, assetID, nonce) => {
+    const hexAddress = addresses.at(-1);
+    const evmInput = new EVMInput(
+        hexAddress,
+        amount,
+        assetID,
+        nonce
+    )
+    evmInput.addSignatureIdx(0, addresses[0])
+    
+    return evmInput
+}
+
+const createEVMOutput = (amount, hexAddress, assetID) => {
+    return new EVMOutput(
+        hexAddress,
+        amount,
+        assetID
+    )
 }
 
 const createOutput = (amount, assetID, addresses, locktime, threshold) => {
@@ -59,60 +83,72 @@ const createInput = (amount, txID, outputIndex, assetID, spenders, threshold) =>
     )
 }
 
-const updateInputs = (utxos, addresses, assetID, toBeUnlocked, chainID) => {
+const updateTransferClass = (chainID) => {
+    { SECPTransferInput, TransferableInput, SECPTransferOutput, TransferableOutput, EVMInput, EVMOutput, index = getTransferClass(chainID) }
+}
+
+const updateInputs = async (utxos, addresses, C, assetID, toBeUnlocked, chainID) => {
     // Getting transferable inputs according to chain id
-    { SECPTransferInput, TransferableInput, SECPTransferOutput, TransferableOutput, index = getTransferClass(chainID) }
+    updateTransferClass(chainID)
 
-    let inputs = [], changeTransferableOutput = null, netInputBalance = new BN(0); 
-    utxos.forEach((utxo) => {
-        let output = utxo.getOutput()
-        if(output.getOutputID() === 7 && assetID.compare(utxo.getAssetID()) === 0 && netInputBalance < toBeUnlocked) {
-            let outputThreshold = output.getThreshold();
-
-            // spenders which we have in our keychain
-            let qualifiedSpenders = output.getSpenders(addresses);
-
-            // create inputs only if we have custody of threshold or more number of utxo spenders
-            if(outputThreshold <= qualifiedSpenders.length) {
-                let txID = utxo.getTxID();
-                let outputIndex = utxo.getOutputIdx();
-                let utxoAmount = output.amountValue;
-                let outputLocktime = output.getLocktime()
-
-                netInputBalance = netInputBalance.add(utxoAmount)
-
-                let excessAmount = toBeUnlocked.sub(netInputBalance);
-
-                // creating change transferable output
-                if(excessAmount < 0) {
-                    changeTransferableOutput = createOutput(
-                        excessAmount.abs(),
+    let inputs = [], changeTransferableOutput = undefined, netInputBalance = new BN(0); 
+    
+    if(C.export) {
+        const nonce = await web3.eth.getTransactionCount(addresses.at(-1));
+        inputs.push(createEVMInput(toBeUnlocked, addresses, assetID, nonce))
+    } else {
+        utxos.forEach((utxo) => {
+            let output = utxo.getOutput()
+            if(output.getOutputID() === 7 && assetID.compare(utxo.getAssetID()) === 0 && netInputBalance.lt(toBeUnlocked)) {
+                let outputThreshold = output.getThreshold();
+    
+                // spenders which we have in our keychain
+                let qualifiedSpenders = output.getSpenders(addresses);
+    
+                // create inputs only if we have custody of threshold or more number of utxo spenders
+                if(outputThreshold <= qualifiedSpenders.length) {
+                    let txID = utxo.getTxID();
+                    let outputIndex = utxo.getOutputIdx();
+                    let utxoAmount = output.amountValue;
+                    let outputLocktime = output.getLocktime()
+    
+                    netInputBalance = netInputBalance.add(utxoAmount)
+    
+                    let excessAmount = netInputBalance.sub(toBeUnlocked);
+    
+                    // creating change transferable output
+                    if(excessAmount > 0) {
+                        if(!C.import) {
+                            changeTransferableOutput = createOutput(
+                                excessAmount,
+                                assetID,
+                                qualifiedSpenders,
+                                outputLocktime,
+                                outputThreshold
+                            )
+                        }
+                    }
+    
+                    // create transferable input
+                    let transferableInput = createInput(
+                        utxoAmount,
+                        txID,
+                        outputIndex,
                         assetID,
                         qualifiedSpenders,
-                        outputLocktime,
                         outputThreshold
                     )
+        
+                    inputs.push(transferableInput)
                 }
-
-                // create transferable input
-                let transferableInput = createInput(
-                    utxoAmount,
-                    txID,
-                    outputIndex,
-                    assetID,
-                    qualifiedSpenders,
-                    outputThreshold
-                )
-    
-                inputs.push(transferableInput)
             }
-        }
-    })
-    return { inputs, changeTransferableOutput, netInputBalance }
+        })
+    }
+    return { inputs, changeTransferableOutput }
 }
 
 module.exports = {
     createOutput,
-    createInput,
+    createEVMOutput,
     updateInputs
 }

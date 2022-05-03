@@ -1,6 +1,8 @@
 {
   "dependencies": {
     "avalanche": "^3.13.3",
-    "dotenv": "^16.0.0"
+    "dotenv": "^16.0.0",
+    "ethereumjs-util": "^7.1.4",
+    "web3": "^1.7.3"
   }
 }
